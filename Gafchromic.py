@@ -180,6 +180,7 @@ class GafchromicFilms:
 
 
 
+# 
 if __name__ == '__main__':
     filename = 'G:/Commun/PHYSICIENS/Erwann/EBT3/09 - etalonnage lot 10151801 19juil2019/films a 24h/scan'
     nbofimgs = 5
