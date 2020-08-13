@@ -128,8 +128,8 @@ class GafchromicFilms:
         return doseimg
 
     
-    # Converts the gafchromic image to dose using the red over blue pixel values and a polynomial 
-    #  conversion curve (3rd degree)
+    # Converts the gafchromic image to dose using the red over blue pixel values and a spline
+    #  conversion curve
     #  coefs: calibration curve coefficients
     #  dosemax: maximum dose over which the dose is not calculated
     def convertToDose_cubicSplineFit(self, splinefile, dosemax):
