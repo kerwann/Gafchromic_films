@@ -1,0 +1,361 @@
+import SimpleITK as sitk 
+import numpy as np
+
+from scipy.signal.signaltools import wiener
+
+from bokeh.plotting import figure, show
+from bokeh.layouts import column
+
+
+
+
+
+
+
+
+class GafchromicFilms:
+    
+    # Constructor
+    #  filename: gafchromic tiff file to read
+    #  if nbOfImgs=1, only the filename is used
+    #  otherwise filename + firstNb + fileExtension
+    def __init__(self, filename, firstNb=0, nbOfImgs=1, fileExtension='.tif', addMethod='median'):
+        self.readImg(filename, firstNb, nbOfImgs, fileExtension, addMethod)
+
+
+    # Reads the image
+    #  filename: filename of the gafchromic tiff file to read
+    #  if nbOfImgs=1, only the filename is used
+    #  otherwise filename + firstNb + fileExtension
+    def readImg(self, filename, firstNb=0, nbOfImgs=1, fileExtension='.tif', addMethod='median'):
+        if nbOfImgs == 1:
+            img = sitk.ReadImage(filename+str(firstNb)+fileExtension)
+            self._sizex = img.GetWidth()
+            self._sizey = img.GetHeight()
+            self._imgOrigin = img.GetOrigin()
+            self._imgSpacing = img.GetSpacing()
+            self._array = sitk.GetArrayFromImage(img)
+            self._multilinearCoef = [0, 0, 0]
+            self._Ccalr = []
+            self._Ccalg = []
+            self._Ccalb = []
+        else:
+            self._multilinearCoef = [0, 0, 0]
+            self._Ccalr = []
+            self._Ccalg = []
+            self._Ccalb = []
+            if addMethod == 'median':
+                img = sitk.ReadImage(filename+str(firstNb)+fileExtension)
+                self._sizex = img.GetWidth()
+                self._sizey = img.GetHeight()
+                self._imgOrigin = img.GetOrigin()
+                self._imgSpacing = img.GetSpacing()
+                size = (sitk.GetArrayFromImage(img).shape[0], 
+                    sitk.GetArrayFromImage(img).shape[1], 
+                    sitk.GetArrayFromImage(img).shape[2], 
+                    nbOfImgs)
+                imgs = np.zeros(size)
+                for i in range(nbOfImgs):
+                    img = sitk.ReadImage(filename+str(firstNb+i)+fileExtension)
+                    imgs[:,:,:,i] = sitk.GetArrayFromImage(img)
+                self._array = np.median(imgs, axis=3)
+            elif addMethod == 'mean':
+                img = sitk.ReadImage(filename+str(firstNb)+fileExtension)
+                self._sizex = img.GetWidth()
+                self._sizey = img.GetHeight()
+                self._imgOrigin = img.GetOrigin()
+                self._imgSpacing = img.GetSpacing()
+                size = (sitk.GetArrayFromImage(img).shape[0], 
+                    sitk.GetArrayFromImage(img).shape[1], 
+                    sitk.GetArrayFromImage(img).shape[2], 
+                    nbOfImgs)
+                imgs = np.zeros(size)
+                for i in range(nbOfImgs):
+                    img = sitk.ReadImage(filename+str(firstNb+i)+fileExtension)
+                    imgs[:,:,:,i] = sitk.GetArrayFromImage(img)
+                self._array = np.mean(imgs, axis=3)
+            else:
+                self._sizex = 0
+                self._sizey = 0
+                self._imgOrigin = 0
+                self._imgSpacing = 0
+                self._array = None
+                raise ValueError('La valeur de la méthode de sommation des images choisie est inconnue')
+
+
+    # method called when print(GafchromicFilms instance)
+    def __str__(self):
+        return 'Class GafchromicFilms: \
+                \n  * sizex: ' + str(self._sizex) + \
+                '\n  * sizey: ' + str(self._sizey) + \
+                '\n  * imgOrigin: ' + str(self._imgOrigin) + \
+                '\n  * imgSpacing: ' + str(self._imgSpacing)
+
+
+    # Returns the array of the gafchromic film image
+    #  x0, x1: first and last pixel in the x direction
+    #  y0, y1: first and last pixel in the y direction
+    def getArray(self):
+        return self._array
+
+
+    # Returns the image size:
+    def getSize(self):
+        return (self._sizex, self._sizey)
+
+
+    # Crops the array:
+    def cropDataArray(self, x0, x1, y0, y1):
+        self._array = self._array[y0:y1, x0:x1]
+
+
+    # Filters the input data using a Wiener filter
+    def applyWienerFilter(self):
+        self._array[:,:,0] = wiener(self._array[:,:,0])
+        self._array[:,:,1] = wiener(self._array[:,:,1])
+        self._array[:,:,2] = wiener(self._array[:,:,2])
+
+
+    # Filters the input data using a Wiener filter
+    def applyStreakCorrection(self):
+        
+        # First pixels sum and normalization:
+        firstPixAvg_r = np.sum(self._array[0:10,:,0] ,axis=0)
+        firstPixAvg_g = np.sum(self._array[0:10,:,1] ,axis=0)
+        firstPixAvg_b = np.sum(self._array[0:10,:,2],axis=0)
+
+        firstPixAvg_r = firstPixAvg_r / np.mean(firstPixAvg_r)
+        firstPixAvg_g = firstPixAvg_g / np.mean(firstPixAvg_g)
+        firstPixAvg_b = firstPixAvg_b / np.mean(firstPixAvg_b)
+
+
+        # Last pixels sum and normalization:
+        lastPixAvg_r = np.sum(self._array[-9:,:,0] ,axis=0)
+        lastPixAvg_g = np.sum(self._array[-9:,:,1] ,axis=0)
+        lastPixAvg_b = np.sum(self._array[-9:,:,2],axis=0)
+
+        lastPixAvg_r = lastPixAvg_r / np.mean(lastPixAvg_r)
+        lastPixAvg_g = lastPixAvg_g / np.mean(lastPixAvg_g)
+        lastPixAvg_b = lastPixAvg_b / np.mean(lastPixAvg_b)
+
+
+        # Streak correction image:
+        #  This correction must be done on an uncroped image
+        streakCorrImage = np.zeros(self._array.shape)
+        x = [0, self._sizey-1]
+
+        for i in range(self._sizex):
+            allpix_y = range(self._sizey)
+            y0 = [firstPixAvg_r[i], lastPixAvg_r[i]]
+            streakCorrImage[:,i,0] = 1 / np.interp(allpix_y, x, y0)
+    
+            y1 = [firstPixAvg_g[i], lastPixAvg_g[i]]
+            streakCorrImage[:,i,1] = 1 / np.interp(allpix_y, x, y1)
+
+            y2 = [firstPixAvg_b[i], lastPixAvg_b[i]]
+            streakCorrImage[:,i,2] = 1 / np.interp(allpix_y, x, y2)
+    
+    
+        # Apply streak correction to the image:
+        self._array = self._array * streakCorrImage
+
+
+    # Calculates multilinear regression coefficients and the fingerprint at 
+    #       the time of calibration.
+    #  doses: array with all given doses (from 0 to 800cGy typically)
+    #  rectangles: rectangles to be used to calculate mean pixel values
+    #       the rectangles order must be the same as the doses order
+    def multilinearRegression(self, doses, rectangles, dispResults=False):
+        
+        # Calculates RGB values in the 
+        rvalues, gvalues, bvalues = [], [], []
+        for i in range(len(rectangles)):
+            rvalues.append(np.mean(self._array[rectangles[i][1]:rectangles[i][3],
+                                 rectangles[i][0]:rectangles[i][2], 0]))
+            gvalues.append(np.mean(self._array[rectangles[i][1]:rectangles[i][3],
+                                 rectangles[i][0]:rectangles[i][2], 1]))
+            bvalues.append(np.mean(self._array[rectangles[i][1]:rectangles[i][3],
+                                 rectangles[i][0]:rectangles[i][2], 2]))
+
+
+        # Calculates nPVrb and fingerprints:
+        nPVr, nPVg, nPVb = [], [], []
+        self._Ccalr, self._Ccalg, self._Ccalb = [], [], []
+        if doses[0] == 0 :
+            for i in range(1, len(rvalues)):
+                ctrlIndex = 0
+                nPVr.append(rvalues[ctrlIndex]/rvalues[i]-1)
+                nPVg.append(gvalues[ctrlIndex]/gvalues[i]-1)
+                nPVb.append(bvalues[ctrlIndex]/bvalues[i]-1)
+                self._Ccalr.append(rvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
+                self._Ccalg.append(gvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
+                self._Ccalb.append(bvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
+                d = doses[1:]
+        elif doses[-1] == 0:
+            for i in range(0, len(rvalues)-1):
+                ctrlIndex = len(rvalues)-1
+                nPVr.append(rvalues[ctrlIndex]/rvalues[i]-1)
+                nPVg.append(gvalues[ctrlIndex]/gvalues[i]-1)
+                nPVb.append(bvalues[ctrlIndex]/bvalues[i]-1)
+                self._Ccalr.append(rvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
+                self._Ccalg.append(gvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
+                self._Ccalb.append(bvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
+                d = doses[0:-1]
+
+                # changement d'ordre des matrices pour avoir des doses croissantes:
+                d = d[::-1]
+                nPVr = nPVr[::-1]
+                nPVg = nPVg[::-1]
+                nPVb = nPVb[::-1]
+        else:
+            print("eRROR: missing ctrl film at first or last place...")
+            return
+
+        self._multilinearCoef = np.linalg.lstsq(np.array([[nPVr[i], nPVg[i], nPVb[i]] for i in range(len(nPVr))]), d, rcond=None)[0]
+
+
+        if dispResults :
+            print('Calculated coefficients:')
+            print(self._multilinearCoef)
+
+            p1 = figure(plot_width=700, plot_height=400, title='RGB values', toolbar_location="above")
+            p1.line(nPVr, d, line_width=2, line_color='firebrick')
+            p1.line(nPVg, d, line_width=2, line_color='green')
+            p1.line(nPVb, d, line_width=2, line_color='blue')
+
+            p2 = figure(plot_width=700, plot_height=400, title='Fingerprints', toolbar_location="above")
+            p2.line(d, self._Ccalr, line_width=2, line_color='firebrick', legend='Ccal_r')
+            p2.line(d, self._Ccalg, line_width=2, line_color='green', legend='Ccal_g')
+            p2.line(d, self._Ccalb, line_width=2, line_color='darkblue', legend='Ccal_b')
+
+            show(column(p1,p2))
+
+
+
+
+    # Saves the multilinear regression coefficients in a text file
+    #  filename: filename to read
+    #  batchNb: batch number
+    #  dispStatus: display results
+    def saveMultilinearRegressionFile(self, filename, batchNb="WTF007", dispStatus=False):
+
+        with open(filename, "w") as f:
+            f.write("Multilinear regression coefficients for batch nb "+batchNb+" \n\n")
+            f.write(str(self._multilinearCoef[0])+'\t'+str(self._multilinearCoef[1])+'\t'+str(self._multilinearCoef[2]))
+
+        if dispStatus:
+            print('Multilinear coefficients: ', self._multilinearCoef)
+            print('Multilinear coefficients saved in file:', filename)
+
+
+    # Reads the multilinear regression coefficients in a text file
+    #  filename: filename to read
+    #  dispStatus: display results
+    def readMultilinearRegressionFile(self, filename, dispStatus=False):
+        
+        with open(filename, "r") as f:
+            for i, line in enumerate(f):
+                if i == 2:
+                    s = line.split("\t")
+                    self._multilinearCoef[0] = float(s[0])
+                    self._multilinearCoef[1] = float(s[1])
+                    self._multilinearCoef[2] = float(s[2])
+
+        if dispStatus:
+            print('Multilinear coefficients read from file: ', self._multilinearCoef)
+
+
+
+    # Converts the gafchromic image to dose using multilinear regression coefs
+    #  doserect: rectangle of the image to convert to dose
+    #  ctrlrect: rectangle to use for the ctrl pixel values (non irradiated film)
+    #  dosemin: minimum dose (values below dosemin will be set to dosemin)
+    #  dosemax: maximum dose (values above dosemax will be set to dosemax)
+    def convertToDose(self, doserect, ctrlrect, dosemin=0, dosemax=850):
+
+        if self._multilinearCoef[0] == 0: 
+            print('You must set the multilinear regression coefficients first !')
+            return None
+
+        # Finds mean values of R, G and B in the ctrl film
+        ctrl_r = np.mean(self._array[ctrlrect[1]:ctrlrect[3],
+                                 ctrlrect[0]:ctrlrect[2], 0])
+        ctrl_g = np.mean(self._array[ctrlrect[1]:ctrlrect[3],
+                                 ctrlrect[0]:ctrlrect[2], 1])
+        ctrl_b = np.mean(self._array[ctrlrect[1]:ctrlrect[3],
+                                 ctrlrect[0]:ctrlrect[2], 2])
+
+
+        # Computes the dose image using the coefs determined above:
+        doseImg = self._multilinearCoef[0]*(ctrl_r / self._array[doserect[1]:doserect[3], doserect[0]:doserect[2],0] - 1) + \
+                    self._multilinearCoef[1]*(ctrl_g / self._array[doserect[1]:doserect[3], doserect[0]:doserect[2],1] - 1) + \
+                    self._multilinearCoef[2]*(ctrl_b / self._array[doserect[1]:doserect[3], doserect[0]:doserect[2],2] - 1)
+
+        doseImg[doseImg>dosemax] = dosemax
+        doseImg[doseImg<dosemin] = dosemin
+        
+        return doseImg
+ 
+
+
+    # Converts the gafchromic image to dose using multilinear regression coefs and 
+    #          fingerprint correction.
+    #  doserect: rectangle of the image to convert to dose
+    #  ctrlrect: rectangle to use for the ctrl pixel values (non irradiated film)
+    #  dosemin: minimum dose (values below dosemin will be set to dosemin)
+    #  dosemax: maximum dose (values above dosemax will be set to dosemax)
+    def convertToDoseWithFingerPrint(self, doserect, ctrlrect, dosemin=0, dosemax=850):
+
+        # checks multilinear coefficients first: 
+        if self._multilinearCoef[0] == 0: 
+            print('You must set the multilinear regression coefficients first !')
+            return None
+
+        # checks for the fingerprints at the time of calibration:
+        if self._Ccalr == [] or self._Ccalb == [] or self._Ccalg == [] :
+            print('You must set the fingerprints first !')
+            return None
+
+        return None
+
+     
+    
+    # Saves the dose image to a tiff file that can be read using Verisoft
+    # doseimg: img to save
+    # filename: filename the dose img will be written to
+    def saveToTiff(self, doseimg, filename):
+        imagetif = sitk.Image([doseimg.shape[1],doseimg.shape[0]], sitk.sitkVectorUInt16, 3)
+        imagetif.SetSpacing(self.img_spacing)
+        imagetif.SetOrigin(self.img_origin)
+        for j in range(0, doseimg.shape[0]):
+            for i in range(0, doseimg.shape[1]):
+                a = int(doseimg[j,i])
+                imagetif.SetPixel(i,j,[a, a, a])
+        
+        writer = sitk.ImageFileWriter()
+        writer.SetFileName(filename)
+        writer.Execute(imagetif)
+        return True
+
+
+
+
+# Main file
+if __name__ == '__main__':
+    filename = 'G:/Commun/PHYSICIENS/Erwann/EBT3/09 - etalonnage lot 10151801 19juil2019/films a 24h/scan'
+    nbofimgs = 5
+    firstimg = 1
+    m_splineFile = 'G:/Commun/PHYSICIENS/Erwann/EBT3/09 - etalonnage lot 10151801 19juil2019/films a 24h/bSpline_data.txt'
+    m_dosemax = 1000.0 #cGy
+    
+    try:
+        g = GafchromicFilms(filename, firstimg, nbofimgs)
+    except ValueError as err:
+        print('Erreur: '+err)
+
+    print(g)
+    plt.figure(1, figsize=(10,10))
+    plt.imshow(g.getArray()[:,:,0])
+    plt.imshow(doseimg)
+    plt.show()
+

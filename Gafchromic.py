@@ -17,8 +17,8 @@ class GafchromicFilms:
 
     # Reads the image
     #  filename: filename of the gafchromic tiff file to read
-    #  si nbOfImgs=1, seul le filename est utilisé
-    #  autrement filename + firstNb + fileExtension
+    #  if nbOfImgs=1, only the filename is used
+    #  otherwise filename + firstNb + fileExtension
     def readImg(self, filename, firstNb=0, nbOfImgs=1, fileExtension='.tif', addMethod='median'):
         if nbOfImgs == 1:
             img = sitk.ReadImage(filename)
