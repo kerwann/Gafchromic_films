@@ -1,5 +1,6 @@
 import SimpleITK as sitk 
 import numpy as np
+import math
 
 from scipy.signal.signaltools import wiener
 
@@ -36,11 +37,13 @@ class GafchromicFilms:
             self._imgSpacing = img.GetSpacing()
             self._array = sitk.GetArrayFromImage(img)
             self._multilinearCoef = [0, 0, 0]
+            self._doses = []
             self._Ccalr = []
             self._Ccalg = []
             self._Ccalb = []
         else:
             self._multilinearCoef = [0, 0, 0]
+            self._doses = []
             self._Ccalr = []
             self._Ccalg = []
             self._Ccalb = []
@@ -93,8 +96,6 @@ class GafchromicFilms:
 
 
     # Returns the array of the gafchromic film image
-    #  x0, x1: first and last pixel in the x direction
-    #  y0, y1: first and last pixel in the y direction
     def getArray(self):
         return self._array
 
@@ -105,8 +106,22 @@ class GafchromicFilms:
 
 
     # Crops the array:
+    #  x0, x1: first and last pixel in the x direction
+    #  y0, y1: first and last pixel in the y direction
     def cropDataArray(self, x0, x1, y0, y1):
         self._array = self._array[y0:y1, x0:x1]
+
+
+
+    # Sub samples the array: could be used to minimize the noise
+    #  subfactor: nb of pixels to sum in x and y direction to make one new pixel
+    def subSampleDataArray(self,subfactor):
+        self._sizex = int(self._sizex/subfactor)
+        self._sizey = int(self._sizey/subfactor)
+        self._imgSpacing = (self._imgSpacing[0]*subfactor, self._imgSpacing[1]*subfactor)
+        self._array = self._array[0:self._sizey*subfactor, 0:self._sizex*subfactor, :]\
+                        .reshape((self._sizey, subfactor, self._sizex, subfactor, 3)).mean(3).mean(1)
+
 
 
     # Filters the input data using a Wiener filter
@@ -178,40 +193,49 @@ class GafchromicFilms:
                                  rectangles[i][0]:rectangles[i][2], 2]))
 
 
-        # Calculates nPVrb and fingerprints:
+        # Calculates nPVrgb:
         nPVr, nPVg, nPVb = [], [], []
-        self._Ccalr, self._Ccalg, self._Ccalb = [], [], []
+        regressiondoses = []
         if doses[0] == 0 :
             for i in range(1, len(rvalues)):
                 ctrlIndex = 0
                 nPVr.append(rvalues[ctrlIndex]/rvalues[i]-1)
                 nPVg.append(gvalues[ctrlIndex]/gvalues[i]-1)
                 nPVb.append(bvalues[ctrlIndex]/bvalues[i]-1)
-                self._Ccalr.append(rvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
-                self._Ccalg.append(gvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
-                self._Ccalb.append(bvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
-                d = doses[1:]
+            regressiondoses = doses[1:]
         elif doses[-1] == 0:
             for i in range(0, len(rvalues)-1):
                 ctrlIndex = len(rvalues)-1
                 nPVr.append(rvalues[ctrlIndex]/rvalues[i]-1)
                 nPVg.append(gvalues[ctrlIndex]/gvalues[i]-1)
                 nPVb.append(bvalues[ctrlIndex]/bvalues[i]-1)
-                self._Ccalr.append(rvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
-                self._Ccalg.append(gvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
-                self._Ccalb.append(bvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
-                d = doses[0:-1]
+            regressiondoses = doses[0:-1]
 
-                # changement d'ordre des matrices pour avoir des doses croissantes:
-                d = d[::-1]
-                nPVr = nPVr[::-1]
-                nPVg = nPVg[::-1]
-                nPVb = nPVb[::-1]
+            # changement d'ordre des matrices pour avoir des doses croissantes:
+            regressiondoses = regressiondoses[::-1]
+            nPVr = nPVr[::-1]
+            nPVg = nPVg[::-1]
+            nPVb = nPVb[::-1]
         else:
             print("eRROR: missing ctrl film at first or last place...")
             return
 
-        self._multilinearCoef = np.linalg.lstsq(np.array([[nPVr[i], nPVg[i], nPVb[i]] for i in range(len(nPVr))]), d, rcond=None)[0]
+
+        # Calculates the fingerprint:
+        self._doses = doses
+        self._Ccalr, self._Ccalg, self._Ccalb = [], [], []
+        for i in range(0, len(rvalues)):
+            self._Ccalr.append(rvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
+            self._Ccalg.append(gvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
+            self._Ccalb.append(bvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
+        if doses[-1] == 0:
+            self._doses = self._doses[-1]
+            self._Ccalr = self._Ccalr[-1]
+            self._Ccalg = self._Ccalg[-1]
+            self._Ccalb = self._Ccalb[-1]
+
+
+        self._multilinearCoef = np.linalg.lstsq(np.array([[nPVr[i], nPVg[i], nPVb[i]] for i in range(len(nPVr))]), regressiondoses, rcond=None)[0]
 
 
         if dispResults :
@@ -219,14 +243,14 @@ class GafchromicFilms:
             print(self._multilinearCoef)
 
             p1 = figure(plot_width=700, plot_height=400, title='RGB values', toolbar_location="above")
-            p1.line(nPVr, d, line_width=2, line_color='firebrick')
-            p1.line(nPVg, d, line_width=2, line_color='green')
-            p1.line(nPVb, d, line_width=2, line_color='blue')
+            p1.line(nPVr, self._doses, line_width=2, line_color='firebrick')
+            p1.line(nPVg, self._doses, line_width=2, line_color='green')
+            p1.line(nPVb, self._doses, line_width=2, line_color='blue')
 
             p2 = figure(plot_width=700, plot_height=400, title='Fingerprints', toolbar_location="above")
-            p2.line(d, self._Ccalr, line_width=2, line_color='firebrick', legend='Ccal_r')
-            p2.line(d, self._Ccalg, line_width=2, line_color='green', legend='Ccal_g')
-            p2.line(d, self._Ccalb, line_width=2, line_color='darkblue', legend='Ccal_b')
+            p2.line(self._doses, self._Ccalr, line_width=2, line_color='firebrick', legend='Ccal_r')
+            p2.line(self._doses, self._Ccalg, line_width=2, line_color='green', legend='Ccal_g')
+            p2.line(self._doses, self._Ccalb, line_width=2, line_color='darkblue', legend='Ccal_b')
 
             show(column(p1,p2))
 
@@ -242,6 +266,17 @@ class GafchromicFilms:
         with open(filename, "w") as f:
             f.write("Multilinear regression coefficients for batch nb "+batchNb+" \n\n")
             f.write(str(self._multilinearCoef[0])+'\t'+str(self._multilinearCoef[1])+'\t'+str(self._multilinearCoef[2]))
+            f.write("\n\n\n\n\nInitial Fingerprints:\n")
+            f.write("Nb of points: "+str(len(self._doses))+"\n\n")
+            f.write("Doses:\n")
+            for i in range(len(self._doses)): f.write(str(self._doses[i])+"\t")
+            f.write("\n\nCcal R:\n")
+            for i in range(len(self._doses)): f.write(str(self._Ccalr[i])+"\t")
+            f.write("\n\nCcal G:\n")
+            for i in range(len(self._doses)): f.write(str(self._Ccalg[i])+"\t")
+            f.write("\n\nCcal B:\n")
+            for i in range(len(self._doses)): f.write(str(self._Ccalb[i])+"\t")
+            
 
         if dispStatus:
             print('Multilinear coefficients: ', self._multilinearCoef)
@@ -253,6 +288,7 @@ class GafchromicFilms:
     #  dispStatus: display results
     def readMultilinearRegressionFile(self, filename, dispStatus=False):
         
+        nbofpoints = 0
         with open(filename, "r") as f:
             for i, line in enumerate(f):
                 if i == 2:
@@ -260,9 +296,30 @@ class GafchromicFilms:
                     self._multilinearCoef[0] = float(s[0])
                     self._multilinearCoef[1] = float(s[1])
                     self._multilinearCoef[2] = float(s[2])
+                if 'Nb of points' in line:
+                    s = line.split(":")
+                    nbofpoints = int(s[1])
+                if i == 11: # Doses
+                    s = line.split("\t")
+                    for i in range(len(s)-1): self._doses.append(float(s[i]))
+                if i == 14: # CcalR
+                    s = line.split("\t")
+                    for i in range(len(s)-1): self._Ccalr.append(float(s[i]))
+                if i == 17: # CcalR
+                    s = line.split("\t")
+                    for i in range(len(s)-1): self._Ccalg.append(float(s[i]))
+                if i == 20: # CcalR
+                    s = line.split("\t")
+                    for i in range(len(s)-1): self._Ccalb.append(float(s[i]))
 
         if dispStatus:
-            print('Multilinear coefficients read from file: ', self._multilinearCoef)
+            print("Multilinear Regression File Read !")
+            print("\nCoefs:", self._multilinearCoef)
+            print("\nDoses:", self._doses)
+            print("\nCcal R:", self._Ccalr)
+            print("\nCcal G:", self._Ccalg)
+            print("\nCcal B:", self._Ccalb)
+
 
 
 
@@ -298,13 +355,45 @@ class GafchromicFilms:
  
 
 
-    # Converts the gafchromic image to dose using multilinear regression coefs and 
+    # Use the dose image and the fingerprints at calibration to iterate a new dose image
+    # array: array to convert to dose
+    # doseimg: dose image to use as a begin image
+    # ctrl_values: mean values of R, G and B in the ctrl film
+    # cmeasr, cmeasg, cmeasb: measured values of Cmeas_r, Cmeas_g and Cmeas_b 
+    #     for each pixel (stored in an array)
+    def fingerprintIteration(self, array, doseimg, ctrl_values, cmeasr, cmeasg, cmeasb):
+    
+        # Calculation of the interpolated Ccal for each pixel
+        ccalr = np.interp(doseimg, self._doses, self._Ccalr)
+        ccalg = np.interp(doseimg, self._doses, self._Ccalg)
+        ccalb = np.interp(doseimg, self._doses, self._Ccalb)
+
+        meanCcal = [np.mean(ccalr), np.mean(ccalg), np.mean(ccalb)]
+
+        # Computes correction Factors:
+        cr = cmeasr / ccalr
+        cg = cmeasg / ccalg
+        cb = cmeasb / ccalb
+
+        # New dose image:
+        imgCorr = cr*self._multilinearCoef[0]*(ctrl_values[0] / array[:,:,0] - 1) + \
+                    cg*self._multilinearCoef[1]*(ctrl_values[1] / array[:,:,1] - 1) + \
+                    cb*self._multilinearCoef[2]*(ctrl_values[2] / array[:,:,2] - 1)
+
+        return imgCorr, meanCcal
+
+
+
+    
+   # Converts the gafchromic image to dose using multilinear regression coefs and 
     #          fingerprint correction.
     #  doserect: rectangle of the image to convert to dose
     #  ctrlrect: rectangle to use for the ctrl pixel values (non irradiated film)
     #  dosemin: minimum dose (values below dosemin will be set to dosemin)
     #  dosemax: maximum dose (values above dosemax will be set to dosemax)
-    def convertToDoseWithFingerPrint(self, doserect, ctrlrect, dosemin=0, dosemax=850):
+    #  dispStatus: set to True to print information during the conversion process
+    #  convThreashold: threashold value after which dose is considered to be converged
+    def convertToDoseWithFingerPrint(self, doserect, ctrlrect, dosemin=0, dosemax=850, dispStatus=False, convThreashold=0.005):
 
         # checks multilinear coefficients first: 
         if self._multilinearCoef[0] == 0: 
@@ -316,22 +405,99 @@ class GafchromicFilms:
             print('You must set the fingerprints first !')
             return None
 
-        return None
+
+        if dispStatus: print("Conversion to dose with fingerprints initiated :")
+
+        # Finds mean values of R, G and B in the ctrl film
+        ctrl_r = np.mean(self._array[ctrlrect[1]:ctrlrect[3],
+                                 ctrlrect[0]:ctrlrect[2], 0])
+        ctrl_g = np.mean(self._array[ctrlrect[1]:ctrlrect[3],
+                                 ctrlrect[0]:ctrlrect[2], 1])
+        ctrl_b = np.mean(self._array[ctrlrect[1]:ctrlrect[3],
+                                 ctrlrect[0]:ctrlrect[2], 2])
+        ctrl_values = [ctrl_r, ctrl_g, ctrl_b]
+
+
+        # Crops the input image
+        toDose_array = self._array[doserect[1]:doserect[3], doserect[0]:doserect[2],:]
+
+
+        # Computes the dose image using the coefs determined above:
+        doseImg = self._multilinearCoef[0]*(ctrl_r / toDose_array[:,:,0] - 1) + \
+                    self._multilinearCoef[1]*(ctrl_g / toDose_array[:,:,1] - 1) + \
+                    self._multilinearCoef[2]*(ctrl_b / toDose_array[:,:,2] - 1)
+        if dispStatus: print("  - 1st dose image computed")
+
+
+        # Computes the fingerprints at measurements time:
+        Cmeas_r = toDose_array[:,:, 0] / (toDose_array[:,:, 0] \
+                    + toDose_array[:,:, 1] + toDose_array[:,:, 2])
+        Cmeas_g = toDose_array[:,:, 1] / (toDose_array[:,:, 0] \
+                    + toDose_array[:,:, 1] + toDose_array[:,:, 2])
+        Cmeas_b = toDose_array[:,:, 2] / (toDose_array[:,:, 0] \
+                    + toDose_array[:,:, 1] + toDose_array[:,:, 2])
+        if dispStatus: print("  - Fingerprints images computed")
+
+
+        # Calculate Ccal and new image dose
+        doseImg, meanCcal0 = self.fingerprintIteration(toDose_array, doseImg, ctrl_values, \
+                                              Cmeas_r, Cmeas_g, Cmeas_b)
+        
+        doseImg[doseImg>dosemax] = dosemax
+        doseImg[doseImg<dosemin] = dosemin
+
+        if dispStatus: print("  - First fingerprint iteration done")
+
+        err = 1
+        i = 0
+        while (err > convThreashold) and (i<100):
+            doseImg, meanCcalIter = self.fingerprintIteration(toDose_array, doseImg, ctrl_values, \
+                                                     Cmeas_r, Cmeas_g, Cmeas_b)
+            doseImg[doseImg>dosemax] = dosemax
+            doseImg[doseImg<dosemin] = dosemin
+
+            err = max([(meanCcalIter[0] - meanCcal0[0])/meanCcal0[0], \
+                            (meanCcalIter[1] - meanCcal0[1])/meanCcal0[1], \
+                            (meanCcalIter[2] - meanCcal0[2])/meanCcal0[2] ])
+
+            i += 1
+            if dispStatus:
+                print("  - Iter no:", i)
+                print("      meanCcal iteration:", meanCcalIter)
+                print("      meanCcal 0:", meanCcal0)
+                print("      convergence R:", (meanCcalIter[0]-meanCcal0[0])/meanCcalIter[0]*100, "%")
+                print("      convergence R:", (meanCcalIter[1]-meanCcal0[1])/meanCcalIter[1]*100, "%")
+                print("      convergence R:", (meanCcalIter[2]-meanCcal0[2])/meanCcalIter[2]*100, "%")
+                print("      max error:", err)
+                print("\n")
+
+            meanCcal0 = meanCcalIter
+
+
+        doseImg[doseImg>dosemax] = dosemax
+        doseImg[doseImg<dosemin] = dosemin
+        
+        if dispStatus: print("\ncONVERSION dONE !")
+
+        return doseImg
+
+
 
      
-    
     # Saves the dose image to a tiff file that can be read using Verisoft
     # doseimg: img to save
     # filename: filename the dose img will be written to
     def saveToTiff(self, doseimg, filename):
+
         imagetif = sitk.Image([doseimg.shape[1],doseimg.shape[0]], sitk.sitkVectorUInt16, 3)
-        imagetif.SetSpacing(self.img_spacing)
-        imagetif.SetOrigin(self.img_origin)
+        imagetif.SetSpacing(self._imgSpacing)
+        imagetif.SetOrigin(self._imgOrigin)
+
         for j in range(0, doseimg.shape[0]):
             for i in range(0, doseimg.shape[1]):
                 a = int(doseimg[j,i])
                 imagetif.SetPixel(i,j,[a, a, a])
-        
+
         writer = sitk.ImageFileWriter()
         writer.SetFileName(filename)
         writer.Execute(imagetif)
