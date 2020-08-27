@@ -105,6 +105,16 @@ class GafchromicFilms:
         return (self._sizex, self._sizey)
 
 
+    # Returns the img spacing:
+    def getSpacing(self):
+        return self._imgSpacing
+
+
+    # Return the img origin:
+    def getOrigin(self):
+        return self._imgOrigin
+
+
     # Crops the array:
     #  x0, x1: first and last pixel in the x direction
     #  y0, y1: first and last pixel in the y direction
@@ -115,10 +125,15 @@ class GafchromicFilms:
 
     # Sub samples the array: could be used to minimize the noise
     #  subfactor: nb of pixels to sum in x and y direction to make one new pixel
+    #  ATTENTION: QUAND CETTE FONCTION EST UTILISEE, IL N'EST PLUS POSSIBLE
+    #  D'UTILISER LA FONCTION D'ENREGISTREMENT DE L'IMAGE EN TIF. LE SPACING
+    #  UTILISE EST CELUI DE L'IMAGE INITIALE.
+    #  JE N'ARRIVE PAS A CHANGER CA. CA FONCTIONNE DANS IMAGEJ MAIS PAS DANS 
+    #  VERISOFT (il ne veut meme pas ouvrir l'image...)
     def subSampleDataArray(self,subfactor):
         self._sizex = int(self._sizex/subfactor)
         self._sizey = int(self._sizey/subfactor)
-        self._imgSpacing = (self._imgSpacing[0]*subfactor, self._imgSpacing[1]*subfactor)
+        #self._imgSpacing = (self._imgSpacing[0]*subfactor, self._imgSpacing[1]*subfactor)
         self._array = self._array[0:self._sizey*subfactor, 0:self._sizex*subfactor, :]\
                         .reshape((self._sizey, subfactor, self._sizex, subfactor, 3)).mean(3).mean(1)
 
@@ -385,7 +400,7 @@ class GafchromicFilms:
 
 
     
-   # Converts the gafchromic image to dose using multilinear regression coefs and 
+    # Converts the gafchromic image to dose using multilinear regression coefs and 
     #          fingerprint correction.
     #  doserect: rectangle of the image to convert to dose
     #  ctrlrect: rectangle to use for the ctrl pixel values (non irradiated film)
@@ -490,6 +505,7 @@ class GafchromicFilms:
     def saveToTiff(self, doseimg, filename):
 
         imagetif = sitk.Image([doseimg.shape[1],doseimg.shape[0]], sitk.sitkVectorUInt16, 3)
+
         imagetif.SetSpacing(self._imgSpacing)
         imagetif.SetOrigin(self._imgOrigin)
 
