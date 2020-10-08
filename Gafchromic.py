@@ -147,7 +147,7 @@ class GafchromicFilms:
                     rbvalues.append(float(s[0]))
                     dose.append(float(s[1]))
         
-        cs = CubicSpline(rbvalues, dose)
+        cs = CubicSpline(rbvalues[::-1], dose[::-1])
 
         # red channel over blue channel:
         rsb = self._array[:,:,0]/self._array[:,:,2]

@@ -507,7 +507,7 @@ class GafchromicFilms:
         imagetif = sitk.Image([doseimg.shape[1],doseimg.shape[0]], sitk.sitkVectorUInt16, 3)
 
         imagetif.SetSpacing(self._imgSpacing)
-        imagetif.SetOrigin(self._imgOrigin)
+        imagetif.SetOrigin(self._imgOrigin)  # probablement le probleme!
 
         for j in range(0, doseimg.shape[0]):
             for i in range(0, doseimg.shape[1]):
