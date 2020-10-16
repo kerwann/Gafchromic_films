@@ -165,8 +165,10 @@ class GafchromicFilms:
     # filename: filename the dose img will be written to
     def saveToTiff(self, doseimg, filename):
         imagetif = sitk.Image([doseimg.shape[1],doseimg.shape[0]], sitk.sitkVectorUInt16, 3)
-        imagetif.SetSpacing(self.img_spacing)
-        imagetif.SetOrigin(self.img_origin)
+
+        imagetif.SetSpacing(self._imgSpacing)
+        imagetif.SetOrigin(self._imgOrigin)
+        
         for j in range(0, doseimg.shape[0]):
             for i in range(0, doseimg.shape[1]):
                 a = int(doseimg[j,i])
