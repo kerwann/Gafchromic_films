@@ -258,14 +258,14 @@ class GafchromicFilms:
             print(self._multilinearCoef)
 
             p1 = figure(plot_width=700, plot_height=400, title='RGB values', toolbar_location="above")
-            p1.line(nPVr, self._doses, line_width=2, line_color='firebrick')
-            p1.line(nPVg, self._doses, line_width=2, line_color='green')
-            p1.line(nPVb, self._doses, line_width=2, line_color='blue')
+            p1.line(nPVr, regressiondoses, line_width=2, line_color='firebrick')
+            p1.line(nPVg, regressiondoses, line_width=2, line_color='green')
+            p1.line(nPVb, regressiondoses, line_width=2, line_color='blue')
 
             p2 = figure(plot_width=700, plot_height=400, title='Fingerprints', toolbar_location="above")
-            p2.line(self._doses, self._Ccalr, line_width=2, line_color='firebrick', legend='Ccal_r')
-            p2.line(self._doses, self._Ccalg, line_width=2, line_color='green', legend='Ccal_g')
-            p2.line(self._doses, self._Ccalb, line_width=2, line_color='darkblue', legend='Ccal_b')
+            p2.line(regressiondoses, self._Ccalr, line_width=2, line_color='firebrick', legend='Ccal_r')
+            p2.line(regressiondoses, self._Ccalg, line_width=2, line_color='green', legend='Ccal_g')
+            p2.line(regressiondoses, self._Ccalb, line_width=2, line_color='darkblue', legend='Ccal_b')
 
             show(column(p1,p2))
 
