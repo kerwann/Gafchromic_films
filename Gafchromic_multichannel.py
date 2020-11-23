@@ -146,8 +146,8 @@ class GafchromicFilms:
         self._array[:,:,2] = wiener(self._array[:,:,2])
 
 
-    # Filters the input data using a Wiener filter
-    def applyStreakCorrection(self):
+    # Does a streak correction on images
+    def applyStreakCorrection(self, a):
         
         # First pixels sum and normalization:
         firstPixAvg_r = np.sum(self._array[0:10,:,0] ,axis=0)

@@ -1,6 +1,7 @@
 import SimpleITK as sitk 
 import numpy as np
 from scipy.interpolate import CubicSpline
+from skimage import filters
 
 import matplotlib.pyplot as plt
 
@@ -20,6 +21,7 @@ class GafchromicFilms:
     #  if nbOfImgs=1, only the filename is used
     #  otherwise filename + firstNb + fileExtension
     def readImg(self, filename, firstNb=0, nbOfImgs=1, fileExtension='.tif', addMethod='median'):
+        self._scannerCorr = False
         if nbOfImgs == 1:
             img = sitk.ReadImage(filename)
             self._sizex = img.GetWidth()
@@ -76,13 +78,66 @@ class GafchromicFilms:
                 '\n  * imgSpacing: ' + str(self._imgSpacing)
 
 
+    # Crops the RGB image
+    #  x0, x1: first and last pixel position in x direction 
+    #  y0, y1: first and last pixel position in y direction 
+    def cropImg(self, x0, x1, y0, y1):
+        if (0<=x0<x1<self._sizex) and (0<=y0<y1<self._sizey):
+            self._sizex = x1-x0
+            self._sizey = y1-y0
+            self._array = self._array[y0:y1, x0:x1, :]
+            return True
+        else:
+            print('The dimensions do not match !')
+            return False
+
+
+    # Correct non uniformity of scanner response. For this correction, a non irradiated film
+    #  must be scanned above/below the irradiated film.
+    #  y0, y1: lines to be used for the correction (uniform non irradiated film)
+    #  returnResults: if True, returns the main calculation values
+    def correctScannerResponse(self, y0, y1, filterValue=25, returnResults=False):
+        if not self._scannerCorr :
+            profileR = np.mean(self._array[y0:y1,:,0], 0)
+            profileG = np.mean(self._array[y0:y1,:,1], 0)
+            profileB = np.mean(self._array[y0:y1,:,2], 0)
+
+            filteredProfileR = filters.gaussian(profileR, filterValue)
+            filteredProfileG = filters.gaussian(profileG, filterValue)
+            filteredProfileB = filters.gaussian(profileB, filterValue)
+
+            mean = np.mean(filteredProfileR)
+            corrR = mean / filteredProfileR
+            mean = np.mean(filteredProfileG)
+            corrG = mean / filteredProfileG
+            mean = np.mean(filteredProfileB)
+            corrB = mean / filteredProfileB
+
+            for i in range(self._sizey):
+                self._array[i,:,0] = self._array[i,:,0] * corrR
+                self._array[i,:,1] = self._array[i,:,1] * corrG
+                self._array[i,:,2] = self._array[i,:,2] * corrB
+
+            self._array[self._array<1] = 1
+            self._array[self._array>65534] = 65534
+
+            self._scannerCorr = True
+
+            if returnResults:
+                return [profileR, profileG, profileB], [filteredProfileR, filteredProfileG, filteredProfileB], [corrR, corrG, corrB]
+        else:
+            print("Scanner response correction already applied.")
+
+
     # Getter de l'array:
     def getArray(self):
         return self._array
 
+
     # Getter de la taille de l'image:
     def getSize(self):
         return (self._sizex, self._sizey)
+
 
     # Converts the gafchromic image to dose using the optical density of red over blue channels and a polynomial 
     #  conversion curve (4th degree)
@@ -115,7 +170,7 @@ class GafchromicFilms:
     #  dosemax: maximum dose over which the dose is not calculated
     def convertToDose_polynomeGreyValueRB(self, coefs, rbmin, rbmax):
         # replaces every 65535 value in array with 65534 to avoid division by zero:
-        self._array[self._array==65535]=65534
+        self._array[self._array<1] = 1
         
         # red channel over blue channel:
         rsb = self._array[:,:,0]/self._array[:,:,2]
@@ -134,7 +189,7 @@ class GafchromicFilms:
     #  dosemax: maximum dose over which the dose is not calculated
     def convertToDose_cubicSplineFit(self, splinefile, dosemax):
         # replaces every 65535 value in array with 65534 to avoid division by zero:
-        self._array[self._array==65535]=65534
+        self._array[self._array<1]=1
  
         # reads the spline file:
         with open(splinefile) as f:
@@ -159,6 +214,39 @@ class GafchromicFilms:
         
         return doseimg
     
+
+    # Converts the gafchromic image to dose using the red over blue pixel values and a spline
+    #  conversion curve. In this version, the white pixels are not converted (dose = 0)
+    #  coefs: calibration curve coefficients
+    #  dosemax: maximum dose over which the dose is not calculated
+    def convertToDose_cubicSplineFit_onlyFilm(self, splinefile, dosemax, blueVmax = 35000):
+        # replaces every 65535 value in array with 65534 to avoid division by zero:
+        self._array[self._array<1]=1
+ 
+        # reads the spline file:
+        with open(splinefile) as f:
+            i = 0
+            dose = []
+            rbvalues = []
+            for line in f:
+                if (line[0]).isdigit():
+                    s = line.split("\t")
+                    rbvalues.append(float(s[0]))
+                    dose.append(float(s[1]))
+        
+        cs = CubicSpline(rbvalues[::-1], dose[::-1])
+
+        # red channel over blue channel:
+        rsb = self._array[:,:,0]/self._array[:,:,2]
+        
+        # converting in dose:
+        doseimg = cs(rsb)
+        doseimg[self._array[:,:,2]>blueVmax] = 0
+        doseimg[doseimg>dosemax] = dosemax
+        doseimg[doseimg<0] = 0
+        
+        return doseimg
+
     
     # Saves the dose image to a tiff file that can be read using Verisoft
     # doseimg: img to save
