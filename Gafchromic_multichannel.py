@@ -258,16 +258,30 @@ class GafchromicFilms:
             print(self._multilinearCoef)
 
             p1 = figure(plot_width=700, plot_height=400, title='RGB values', toolbar_location="above")
-            p1.line(nPVr, regressiondoses, line_width=2, line_color='firebrick')
-            p1.line(nPVg, regressiondoses, line_width=2, line_color='green')
-            p1.line(nPVb, regressiondoses, line_width=2, line_color='blue')
+            p1.xaxis.axis_label = "Dose"
+            p1.yaxis.axis_label = "nPV"
+            p1.line(regressiondoses, nPVr, line_width=2, line_color='firebrick')
+            p1.line(regressiondoses, nPVg, line_width=2, line_color='green')
+            p1.line(regressiondoses, nPVb, line_width=2, line_color='blue')
 
-            p2 = figure(plot_width=700, plot_height=400, title='Fingerprints', toolbar_location="above")
-            p2.line(regressiondoses, self._Ccalr, line_width=2, line_color='firebrick', legend='Ccal_r')
-            p2.line(regressiondoses, self._Ccalg, line_width=2, line_color='green', legend='Ccal_g')
-            p2.line(regressiondoses, self._Ccalb, line_width=2, line_color='darkblue', legend='Ccal_b')
+            r_nPVr = [i * self._multilinearCoef[0] for i in nPVr]     # multiply every elt of a list with a value
+            r_nPVg = [i * self._multilinearCoef[1] for i in nPVg]
+            r_nPVb = [i * self._multilinearCoef[2] for i in nPVb]
+            nPVrgb = [i+j+k for i,j,k in zip(r_nPVr,r_nPVg,r_nPVb)]
+            p2 = figure(plot_width=700, plot_height=400, title='nPVrgb vs dose', toolbar_location="above")
+            p2.xaxis.axis_label = "Dose"
+            p2.yaxis.axis_label = "r*nPV or nPVrgb"
+            p2.line(regressiondoses, regressiondoses, line_width=1, line_dash="4 4",line_color='black')
+            p2.line(regressiondoses, nPVrgb, line_width=2, line_color='black')
 
-            show(column(p1,p2))
+            p3 = figure(plot_width=700, plot_height=400, title='Fingerprints', toolbar_location="above")
+            p3.xaxis.axis_label = "Dose"
+            p3.yaxis.axis_label = "Fingerprints Ccal"
+            p3.line(regressiondoses, self._Ccalr, line_width=2, line_color='firebrick', legend='Ccal_r')
+            p3.line(regressiondoses, self._Ccalg, line_width=2, line_color='green', legend='Ccal_g')
+            p3.line(regressiondoses, self._Ccalb, line_width=2, line_color='darkblue', legend='Ccal_b')
+
+            show(column(p1,p2,p3))
 
 
 
