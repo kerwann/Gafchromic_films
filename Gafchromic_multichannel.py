@@ -133,7 +133,7 @@ class GafchromicFilms:
     def subSampleDataArray(self,subfactor):
         self._sizex = int(self._sizex/subfactor)
         self._sizey = int(self._sizey/subfactor)
-        #self._imgSpacing = (self._imgSpacing[0]*subfactor, self._imgSpacing[1]*subfactor)
+        #self._imgSpacing = (self._imgSpacing[0]*subfactor, self._imgSpacing[1]*subfactor)  # le pb vient de cette ligne
         self._array = self._array[0:self._sizey*subfactor, 0:self._sizex*subfactor, :]\
                         .reshape((self._sizey, subfactor, self._sizex, subfactor, 3)).mean(3).mean(1)
 
@@ -521,7 +521,7 @@ class GafchromicFilms:
         imagetif = sitk.Image([doseimg.shape[1],doseimg.shape[0]], sitk.sitkVectorUInt16, 3)
 
         imagetif.SetSpacing(self._imgSpacing)
-        imagetif.SetOrigin(self._imgOrigin)  # probablement le probleme!
+        #imagetif.SetOrigin(self._imgOrigin)  # probablement le probleme!
 
         for j in range(0, doseimg.shape[0]):
             for i in range(0, doseimg.shape[1]):
