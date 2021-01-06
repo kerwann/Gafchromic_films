@@ -23,7 +23,7 @@ class GafchromicFilms:
     def readImg(self, filename, firstNb=0, nbOfImgs=1, fileExtension='.tif', addMethod='median'):
         self._scannerCorr = False
         if nbOfImgs == 1:
-            img = sitk.ReadImage(filename)
+            img = sitk.ReadImage(filename+str(firstNb)+fileExtension)
             self._sizex = img.GetWidth()
             self._sizey = img.GetHeight()
             self._imgOrigin = img.GetOrigin()
