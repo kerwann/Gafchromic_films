@@ -78,6 +78,21 @@ class GafchromicFilms:
                 '\n  * imgSpacing: ' + str(self._imgSpacing)
 
 
+    # Sub samples the array: could be used to minimize the noise
+    #  subfactor: nb of pixels to sum in x and y direction to make one new pixel
+    #  ATTENTION: QUAND CETTE FONCTION EST UTILISEE, IL N'EST PLUS POSSIBLE
+    #  D'UTILISER LA FONCTION D'ENREGISTREMENT DE L'IMAGE EN TIF. LE SPACING
+    #  UTILISE EST CELUI DE L'IMAGE INITIALE.
+    #  JE N'ARRIVE PAS A CHANGER CA. CA FONCTIONNE DANS IMAGEJ MAIS PAS DANS 
+    #  VERISOFT (il ne veut meme pas ouvrir l'image...)
+    def subSampleDataArray(self,subfactor):
+        self._sizex = int(self._sizex/subfactor)
+        self._sizey = int(self._sizey/subfactor)
+        #self._imgSpacing = (self._imgSpacing[0]*subfactor, self._imgSpacing[1]*subfactor)  # le pb vient de cette ligne
+        self._array = self._array[0:self._sizey*subfactor, 0:self._sizex*subfactor, :]\
+                        .reshape((self._sizey, subfactor, self._sizex, subfactor, 3)).mean(3).mean(1)
+
+
     # Crops the RGB image
     #  x0, x1: first and last pixel position in x direction 
     #  y0, y1: first and last pixel position in y direction 
