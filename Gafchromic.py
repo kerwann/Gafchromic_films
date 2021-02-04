@@ -149,6 +149,11 @@ class GafchromicFilms:
         return self._array
 
 
+    # Sets the array: (mainly for tests purposes)
+    def setArray(self, array):
+        self._array = array
+
+
     # Getter de la taille de l'image:
     def getSize(self):
         return (self._sizex, self._sizey)
