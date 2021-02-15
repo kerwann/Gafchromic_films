@@ -6,7 +6,7 @@ from skimage import filters
 import matplotlib.pyplot as plt
 
 
-class GafchromicFilms:
+class Radiochromic_RB:
     
     # Constructor
     #  filename: gafchromic tiff file to read

@@ -14,7 +14,7 @@ from bokeh.layouts import column
 
 
 
-class GafchromicFilms:
+class Radiochromic_multilinear:
     
     # Constructor
     #  filename: gafchromic tiff file to read
@@ -121,6 +121,10 @@ class GafchromicFilms:
     def cropDataArray(self, x0, x1, y0, y1):
         self._array = self._array[y0:y1, x0:x1]
 
+
+    # Sets the array: (mainly for tests purposes)
+    def setArray(self, array):
+        self._array = array
 
 
     # Sub samples the array: could be used to minimize the noise
@@ -244,10 +248,10 @@ class GafchromicFilms:
             self._Ccalg.append(gvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
             self._Ccalb.append(bvalues[i]/(rvalues[i]+gvalues[i]+bvalues[i]))
         if doses[-1] == 0:
-            self._doses = self._doses[-1]
-            self._Ccalr = self._Ccalr[-1]
-            self._Ccalg = self._Ccalg[-1]
-            self._Ccalb = self._Ccalb[-1]
+            self._doses = self._doses[::-1]
+            self._Ccalr = self._Ccalr[::-1]
+            self._Ccalg = self._Ccalg[::-1]
+            self._Ccalb = self._Ccalb[::-1]
 
 
         self._multilinearCoef = np.linalg.lstsq(np.array([[nPVr[i], nPVg[i], nPVb[i]] for i in range(len(nPVr))]), regressiondoses, rcond=None)[0]
@@ -277,9 +281,9 @@ class GafchromicFilms:
             p3 = figure(plot_width=700, plot_height=400, title='Fingerprints', toolbar_location="above")
             p3.xaxis.axis_label = "Dose"
             p3.yaxis.axis_label = "Fingerprints Ccal"
-            p3.line(regressiondoses, self._Ccalr, line_width=2, line_color='firebrick', legend='Ccal_r')
-            p3.line(regressiondoses, self._Ccalg, line_width=2, line_color='green', legend='Ccal_g')
-            p3.line(regressiondoses, self._Ccalb, line_width=2, line_color='darkblue', legend='Ccal_b')
+            p3.line(self._doses, self._Ccalr, line_width=2, line_color='firebrick')
+            p3.line(self._doses, self._Ccalg, line_width=2, line_color='green')
+            p3.line(self._doses, self._Ccalb, line_width=2, line_color='darkblue')
 
             show(column(p1,p2,p3))
 
