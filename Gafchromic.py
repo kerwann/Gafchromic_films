@@ -1,4 +1,4 @@
-import SimpleITK as sitk 
+import SimpleITK as sitk
 import numpy as np
 from scipy.interpolate import CubicSpline
 from skimage import filters
@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 
 class Radiochromic_RB:
-    
+
     # Constructor
     #  filename: gafchromic tiff file to read
     #  si nbOfImgs=1, seul le filename est utilisé
@@ -36,9 +36,9 @@ class Radiochromic_RB:
                 self._sizey = img.GetHeight()
                 self._imgOrigin = img.GetOrigin()
                 self._imgSpacing = img.GetSpacing()
-                size = (sitk.GetArrayFromImage(img).shape[0], 
-                    sitk.GetArrayFromImage(img).shape[1], 
-                    sitk.GetArrayFromImage(img).shape[2], 
+                size = (sitk.GetArrayFromImage(img).shape[0],
+                    sitk.GetArrayFromImage(img).shape[1],
+                    sitk.GetArrayFromImage(img).shape[2],
                     nbOfImgs)
                 imgs = np.zeros(size)
                 for i in range(nbOfImgs):
@@ -51,9 +51,9 @@ class Radiochromic_RB:
                 self._sizey = img.GetHeight()
                 self._imgOrigin = img.GetOrigin()
                 self._imgSpacing = img.GetSpacing()
-                size = (sitk.GetArrayFromImage(img).shape[0], 
-                    sitk.GetArrayFromImage(img).shape[1], 
-                    sitk.GetArrayFromImage(img).shape[2], 
+                size = (sitk.GetArrayFromImage(img).shape[0],
+                    sitk.GetArrayFromImage(img).shape[1],
+                    sitk.GetArrayFromImage(img).shape[2],
                     nbOfImgs)
                 imgs = np.zeros(size)
                 for i in range(nbOfImgs):
@@ -83,7 +83,7 @@ class Radiochromic_RB:
     #  ATTENTION: QUAND CETTE FONCTION EST UTILISEE, IL N'EST PLUS POSSIBLE
     #  D'UTILISER LA FONCTION D'ENREGISTREMENT DE L'IMAGE EN TIF. LE SPACING
     #  UTILISE EST CELUI DE L'IMAGE INITIALE.
-    #  JE N'ARRIVE PAS A CHANGER CA. CA FONCTIONNE DANS IMAGEJ MAIS PAS DANS 
+    #  JE N'ARRIVE PAS A CHANGER CA. CA FONCTIONNE DANS IMAGEJ MAIS PAS DANS
     #  VERISOFT (il ne veut meme pas ouvrir l'image...)
     def subSampleDataArray(self,subfactor):
         self._sizex = int(self._sizex/subfactor)
@@ -94,8 +94,8 @@ class Radiochromic_RB:
 
 
     # Crops the RGB image
-    #  x0, x1: first and last pixel position in x direction 
-    #  y0, y1: first and last pixel position in y direction 
+    #  x0, x1: first and last pixel position in x direction
+    #  y0, y1: first and last pixel position in y direction
     def cropImg(self, x0, x1, y0, y1):
         if (0<=x0<x1<self._sizex) and (0<=y0<y1<self._sizey):
             self._sizex = x1-x0
@@ -159,50 +159,50 @@ class Radiochromic_RB:
         return (self._sizex, self._sizey)
 
 
-    # Converts the gafchromic image to dose using the optical density of red over blue channels and a polynomial 
+    # Converts the gafchromic image to dose using the optical density of red over blue channels and a polynomial
     #  conversion curve (4th degree)
     #  coefs: calibration curve coefficients
     #  dosemax: maximum dose over which the dose is not calculated
     def convertToDose_polynomeLogRB(self, coefs, rbmin, rbmax, dosemax):
         # replaces every 65535 value in array with 65534 to avoid division by zero:
         self._array[self._array==65535]=65534
-        
+
         # converts in optical density
         dor = -np.log10(self._array[:,:,0]/65535.0)
         dob = -np.log10(self._array[:,:,2]/65535.0)
-    
+
         # red channel over blue channel:
         rsb = dor/dob
         rsb[rsb<rbmin] = rbmin
         rsb[rsb>rbmax] = rbmax
-        
+
         # converting in dose:
         doseimg = coefs[0]*rsb**6 + coefs[1]*rsb**5 + coefs[2]*rsb**4 + coefs[3]*rsb**3 + coefs[4]*rsb**2 + coefs[5]*rsb + coefs[6]
         doseimg[doseimg>dosemax] = dosemax
         doseimg[doseimg<0] = 0
-        
+
         return doseimg
-    
-    
-    # Converts the gafchromic image to dose using the red over blue pixel values and a polynomial 
+
+
+    # Converts the gafchromic image to dose using the red over blue pixel values and a polynomial
     #  conversion curve (3rd degree)
     #  coefs: calibration curve coefficients
     #  dosemax: maximum dose over which the dose is not calculated
     def convertToDose_polynomeGreyValueRB(self, coefs, rbmin, rbmax):
         # replaces every 65535 value in array with 65534 to avoid division by zero:
         self._array[self._array<1] = 1
-        
+
         # red channel over blue channel:
         rsb = self._array[:,:,0]/self._array[:,:,2]
         rsb[rsb<rbmin] = rbmin
         rsb[rsb>rbmax] = rbmax
-        
+
         # converting in dose:
         doseimg = coefs[0]*rsb**6 + coefs[1]*rsb**5 + coefs[2]*rsb**4 + coefs[3]*rsb**3 + coefs[4]*rsb**2 + coefs[5]*rsb + coefs[6]
-        
+
         return doseimg
 
-    
+
     # Converts the gafchromic image to dose using the red over blue pixel values and a spline
     #  conversion curve
     #  coefs: calibration curve coefficients
@@ -210,7 +210,7 @@ class Radiochromic_RB:
     def convertToDose_cubicSplineFit(self, splinefile, dosemax):
         # replaces every 65535 value in array with 65534 to avoid division by zero:
         self._array[self._array<1]=1
- 
+
         # reads the spline file:
         with open(splinefile) as f:
             i = 0
@@ -221,19 +221,19 @@ class Radiochromic_RB:
                     s = line.split("\t")
                     rbvalues.append(float(s[0]))
                     dose.append(float(s[1]))
-        
+
         cs = CubicSpline(rbvalues[::-1], dose[::-1])
 
         # red channel over blue channel:
         rsb = self._array[:,:,0]/self._array[:,:,2]
-        
+
         # converting in dose:
         doseimg = cs(rsb)
         doseimg[doseimg>dosemax] = dosemax
         doseimg[doseimg<0] = 0
-        
+
         return doseimg
-    
+
 
     # Converts the gafchromic image to dose using the red over blue pixel values and a spline
     #  conversion curve. In this version, the white pixels are not converted (dose = 0)
@@ -242,7 +242,7 @@ class Radiochromic_RB:
     def convertToDose_cubicSplineFit_onlyFilm(self, splinefile, dosemax, blueVmax = 35000):
         # replaces every 65535 value in array with 65534 to avoid division by zero:
         self._array[self._array<1]=1
- 
+
         # reads the spline file:
         with open(splinefile) as f:
             i = 0
@@ -253,21 +253,21 @@ class Radiochromic_RB:
                     s = line.split("\t")
                     rbvalues.append(float(s[0]))
                     dose.append(float(s[1]))
-        
+
         cs = CubicSpline(rbvalues[::-1], dose[::-1])
 
         # red channel over blue channel:
         rsb = self._array[:,:,0]/self._array[:,:,2]
-        
+
         # converting in dose:
         doseimg = cs(rsb)
         doseimg[self._array[:,:,2]>blueVmax] = 0
         doseimg[doseimg>dosemax] = dosemax
         doseimg[doseimg<0] = 0
-        
+
         return doseimg
 
-    
+
     # Saves the dose image to a tiff file that can be read using Verisoft
     # doseimg: img to save
     # filename: filename the dose img will be written to
@@ -276,12 +276,12 @@ class Radiochromic_RB:
 
         imagetif.SetSpacing(self._imgSpacing)
         imagetif.SetOrigin(self._imgOrigin)
-        
+
         for j in range(0, doseimg.shape[0]):
             for i in range(0, doseimg.shape[1]):
                 a = int(doseimg[j,i])
                 imagetif.SetPixel(i,j,[a, a, a])
-        
+
         writer = sitk.ImageFileWriter()
         writer.SetFileName(filename)
         writer.Execute(imagetif)
@@ -290,14 +290,14 @@ class Radiochromic_RB:
 
 
 
-# 
+#
 if __name__ == '__main__':
     filename = 'G:/Commun/PHYSICIENS/Erwann/EBT3/09 - etalonnage lot 10151801 19juil2019/films a 24h/scan'
     nbofimgs = 5
     firstimg = 1
     m_splineFile = 'G:/Commun/PHYSICIENS/Erwann/EBT3/09 - etalonnage lot 10151801 19juil2019/films a 24h/bSpline_data.txt'
     m_dosemax = 1000.0 #cGy
-    
+
     try:
         g = GafchromicFilms(filename, firstimg, nbofimgs)
         doseimg = g.convertToDose_cubicSplineFit(m_splineFile, m_dosemax)
@@ -309,4 +309,3 @@ if __name__ == '__main__':
     plt.imshow(g.getArray()[:,:,0])
     plt.imshow(doseimg)
     plt.show()
-
